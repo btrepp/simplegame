@@ -1,0 +1,21 @@
+{
+  "name": "game",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "output"
+  ],
+  "dependencies": {
+    "purescript-prelude": "^4.1.0",
+    "purescript-console": "^4.1.0",
+    "purescript-effect": "^2.0.0",
+    "pixi.min": "https://cdnjs.cloudflare.com/ajax/libs/pixi.js/4.7.1/pixi.min.js",
+    "purescript-web-html": "^1.2.0",
+    "purescript-jquery": "^5.0.0"
+  },
+  "devDependencies": {
+    "purescript-psci-support": "^4.0.0",
+    "purescript-easy-ffi": "^2.1.2"
+  }
+}
