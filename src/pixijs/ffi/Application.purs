@@ -1,5 +1,5 @@
 module Graphics.Pixi.FFI.Application 
-            (Application,newApplication,_view) where
+            (Application,newApplication,_view,_stage) where
 
 import Data.Function.Uncurried (Fn1, runFn1)
 import Graphics.Pixi.FFI.Container (Container)

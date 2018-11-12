@@ -11,7 +11,7 @@ exports.viewImpl = function (application){
     }
 }
 
-exports.stageImpl = function (app){
+exports.stageImpl = function (application){
     return function (){
         return application.stage;
     }
