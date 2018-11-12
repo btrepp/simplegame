@@ -6,5 +6,13 @@ exports.newApplicationImpl = function (arg){
 }
 
 exports.viewImpl = function (application){
-    return application.view;
+    return function (){
+        return application.view;
+    }
+}
+
+exports.stageImpl = function (app){
+    return function (){
+        return application.stage;
+    }
 }
