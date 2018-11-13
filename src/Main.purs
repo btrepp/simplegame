@@ -2,48 +2,63 @@ module Main where
 
 import Prelude
 
+import Control.Monad.Maybe.Trans (MaybeT(..), lift, runMaybeT)
+import DOM (loaded)
 import Data.Maybe (Maybe(..))
 import Effect (Effect)
+import Effect.Aff (launchAff_)
+import Effect.Class (liftEffect)
 import Effect.Console (log)
 import Graphics.PIXI.FFI.Rectangle (newRectangle)
 import Graphics.Pixi.FF.Texture (newTexture)
-import Graphics.Pixi.FFI.Application (Application, newApplication, _view,_stage)
-import Graphics.Pixi.FFI.BaseTexture (fromImage)
+import Graphics.Pixi.FFI.Application (Application, newApplication, _view, _stage)
+import Graphics.Pixi.FFI.BaseTexture (fromImage, Image)
 import Graphics.Pixi.FFI.Container (addChild)
-import Graphics.Pixi.FFI.Sprite (newSprite,setPositionX)
+import Graphics.Pixi.FFI.Sprite (Sprite, newSprite, setPositionX)
 import Web.DOM.Node (appendChild)
 import Web.HTML (window)
 import Web.HTML.HTMLDocument (body)
 import Web.HTML.HTMLElement (toNode)
 import Web.HTML.Window (document)
 
-initStage :: Effect (Maybe Application)
+initStage :: MaybeT Effect Application
 initStage = do
-  b <- window >>= document >>= body
-  case b of 
-    Nothing -> pure Nothing
-    Just b2 -> do
-        app <- newApplication  {height : 320, width : 240}
-        view <- toNode <$> _view app
-        _ <- appendChild view (toNode b2)
-        pure (Just app)
+  body <- toNode <$> (MaybeT $ (window >>= document >>= body))
+  app <- lift $ newApplication {height: 240, width : 320}
+  view <- toNode <$> (lift $ _view app)
+  _ <- lift $ appendChild view body
+  pure app
+
+loadSprite :: Image 
+                     -> {x::Number
+                        ,y::Number
+                        ,width::Number
+                        ,height::Number} 
+                      -> Effect Sprite
+loadSprite imageSheet opts = do
+  rect <- newRectangle opts
+  texture <- newTexture imageSheet rect
+  sprite <- newSprite texture
+  pure sprite
 
 main :: Effect Unit
-main = do
-  imageSheet <- fromImage "maps/tmw_desert_spacing.png"
-  rect <- newRectangle {x:0.0,y:0.0,width:32.0,height:32.0}
-  rect2 <- newRectangle {x:32.0,y:32.0,width:32.0,height:32.0}
-  texture <- newTexture imageSheet rect
-  texture2 <- newTexture imageSheet rect2
-  sprite <- newSprite texture
-  sprite2 <- newSprite texture2
-  app <- initStage
+main = launchAff_ $ do
+  image <- liftEffect $ fromImage "maps/tmw_desert_spacing.png"
+  loaded
+  app <- liftEffect $ runMaybeT $ initStage 
+  
   case app of 
    Just a -> do
-    stage <- _stage a
-    setPositionX sprite2 32.0
-    addChild sprite stage
-    addChild sprite2 stage
-   Nothing -> pure unit    
+    stage <- liftEffect $ _stage a
 
-  log "Hello sailor!"
+    sprite1 <- liftEffect $ loadSprite image 
+                  {x: 0.0,y:0.0,width:32.0,height:32.0}
+    sprite2 <- liftEffect $ loadSprite image 
+                  {x: 0.0,y:32.0,width:32.0,height:32.0}
+    liftEffect $ setPositionX sprite2 32.0
+    liftEffect $ addChild sprite1 stage
+    liftEffect $ addChild sprite2 stage
+   Nothing -> 
+        liftEffect $ log "No body"    
+
+  liftEffect $ log "Hello sailor!"
