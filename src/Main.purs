@@ -4,11 +4,14 @@ import Prelude
 
 import Control.Monad.Maybe.Trans (MaybeT(..), lift, runMaybeT)
 import DOM (loaded)
+import Data.Either (Either)
 import Data.Maybe (Maybe(..))
+import Data.Tiled.File.Map (Map)
 import Effect (Effect)
-import Effect.Aff (launchAff_)
+import Effect.Aff (launchAff_, Aff)
 import Effect.Class (liftEffect)
 import Effect.Console (log)
+import Game.AssetLoader (loadAsset)
 import Graphics.PIXI.FFI.Rectangle (newRectangle)
 import Graphics.Pixi.FF.Texture (newTexture)
 import Graphics.Pixi.FFI.Application (Application, newApplication, _view, _stage)
@@ -41,12 +44,16 @@ loadSprite imageSheet opts = do
   sprite <- newSprite texture
   pure sprite
 
+
+level1 :: Aff (Either String Map)
+level1 = loadAsset "maps/level1.json"
+
 main :: Effect Unit
 main = launchAff_ $ do
   image <- liftEffect $ fromImage "maps/tmw_desert_spacing.png"
   loaded
   app <- liftEffect $ runMaybeT $ initStage 
-  
+  _ <- level1
   case app of 
    Just a -> do
     stage <- liftEffect $ _stage a
