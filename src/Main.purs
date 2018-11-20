@@ -58,6 +58,7 @@ main = launchAff_ $ do
     liftEffect $ setPositionX sprite2 32.0
     liftEffect $ addChild sprite1 stage
     liftEffect $ addChild sprite2 stage
+    liftEffect $ setPositionX sprite2 64.0
    Nothing -> 
         liftEffect $ log "No body"    
 
