@@ -5,7 +5,6 @@ import Prelude
 import Affjax (get, printResponseFormatError)
 import Affjax.ResponseFormat (ResponseFormat(..))
 import Affjax.ResponseFormat as ResponseFormat
-import Blob (blobUri)
 import Control.Monad.Except (ExceptT(..), except, runExceptT, throwError, withExceptT)
 import Data.Argonaut (Json, class DecodeJson, decodeJson)
 import Data.Either (Either)
@@ -20,7 +19,7 @@ import Debug.Trace as Debug
 import Effect (Effect)
 import Effect.Aff (Aff)
 import Web.File.Blob (Blob)
-
+import Web.File.Url (createObjectURL)
 
 type Assets = 
     { map :: Map
@@ -69,4 +68,4 @@ loadMapAndAssets name = runExceptT do
 -- | Converts the blobs into data uris
 uriAssets :: Assets -> Effect (Map.Map String String)
 uriAssets assets = 
-    traverse (blobUri) assets.images
+    traverse createObjectURL assets.images
