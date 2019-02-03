@@ -3,69 +3,90 @@
 import Prelude
 
 import Affjax (get, printResponseFormatError)
-import Affjax.ResponseFormat (ResponseFormat(..))
 import Affjax.ResponseFormat as ResponseFormat
-import Control.Monad.Except (ExceptT(..), except, runExceptT, throwError, withExceptT)
-import Data.Argonaut (Json, class DecodeJson, decodeJson)
-import Data.Either (Either)
+import Control.Monad.Except (ExceptT(..), except, runExceptT, withExceptT)
+import Control.Monad.Error.Class (throwError)
+import Data.Argonaut (Json)
+import Data.Either (Either(..))
 import Data.List (List)
 import Data.Map as Map
-import Data.MediaType.Common as Responseformat
-import Data.Tiled.File.Map (Map, externalTileSets)
-import Data.Tiled.File.Tileset (Tileset(..))
-import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..))
-import Debug.Trace as Debug
+import Data.Tiled.File.Map (Map, externalTilesets,decodeJsonMap)
+import Data.Tiled.File.Tileset (Tileset, decodeJsonTileset)
+import Data.Traversable (traverse)
 import Effect (Effect)
+import Effect.Exception (error)
 import Effect.Aff (Aff)
 import Web.File.Blob (Blob)
 import Web.File.Url (createObjectURL)
 
-type Assets = 
-    { map :: Map
-      , tilesets :: List Tileset
+-- | Represents all the assets for a map
+-- | Its the map, external tilesets
+-- | and image references
+type MapAssets = 
+      { map :: Map
+      , tilesets :: Map.Map String Tileset
       , images :: Map.Map String Blob }
 
-getJson :: String -> ExceptT String Aff Json
-getJson url = 
-        withExceptT printResponseFormatError
-        $ ExceptT (_.body <$> get ResponseFormat.json url)
+-- | Runs an ExceptT of Aff and throws
+-- | the exceptions in the aff
+run :: forall a . ExceptT String Aff a -> Aff a
+run e = do
+    r <-  runExceptT e 
+    case r of 
+      Left ex -> throwError $ error ex
+      Right x  -> pure x
 
-loadAsset :: forall asset . DecodeJson asset => 
-                 String -> Aff (Either String asset)
-loadAsset name = runExceptT do
-    js <-  getJson name
-    map <- except $ decodeJson js
-    pure map
+-- | Loads either a map or tileset
+loadAsset :: forall asset .
+             (Json -> Either String asset) 
+             -> String
+             -> Aff asset
+loadAsset decode url= run do
+    response <- withExceptT printResponseFormatError
+                $ ExceptT 
+                $ _.body
+                <$> get ResponseFormat.json url
+    parsed <- except $ decode response
+    pure parsed
 
-loadImage :: String -> ExceptT String Aff (Tuple String Blob)
-loadImage name =
-    withName 
-    <$> 
-    (withExceptT printResponseFormatError
-    $ ExceptT (_.body <$> get ResponseFormat.blob url))
-    where withName blob = Tuple name blob
-          url = "maps/" <> name
+-- | Loads images as blobs
+loadImage :: String -> Aff Blob
+loadImage url = run do
+    response <- withExceptT printResponseFormatError
+                $ ExceptT
+                $ _.body 
+                <$> get ResponseFormat.blob url
+    pure response                
 
-imageName :: Tileset -> String
-imageName (Tileset t) = t.image
+-- | Walk the resources and load all the items
+-- | Needed to render the map
+loadMapAssets :: String -> Aff MapAssets
+loadMapAssets name = do
+    map' <- loadMap
+    let externalTileNames = externalTilesets map'
+    tilesets <- Map.fromFoldable 
+                <$> traverse loadTile externalTileNames
+    let imageNames = map _.image $ Map.values tilesets                    
+    images <- Map.fromFoldable 
+              <$> traverse loadImage' imageNames
 
-loadMapAndAssets :: String -> Aff (Either String Assets) 
-loadMapAndAssets name = runExceptT do
-    map' <- ExceptT $ loadAsset $ path name
-    let names = externalTileSets map'
-    tilesets <- traverse (path>>>loadAsset>>>ExceptT) names 
-    let imagenames =  map imageName tilesets
-    images <- Map.fromFoldable <$> (traverse loadImage imagenames)
-    pure $ {
+    pure {
         map : map', tilesets, images
     }
 
     where path :: String -> String
           path x = "maps/" <> x
-
+          
+          loadMap = loadAsset decodeJsonMap 
+                                $ path name
+          loadTile name' = Tuple name' 
+                           <$> (loadAsset decodeJsonTileset $ path name')
+          loadImage' name' = Tuple name'
+                            <$> (loadImage $ path name')
 
 -- | Converts the blobs into data uris
-uriAssets :: Assets -> Effect (Map.Map String String)
+-- | These can be loaded into the browser
+uriAssets :: MapAssets -> Effect (Map.Map String String)
 uriAssets assets = 
     traverse createObjectURL assets.images
