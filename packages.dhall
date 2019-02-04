@@ -226,6 +226,17 @@ let upstream =
 
 let overrides = {=}
 
-let additions = {=}
+let additions = {
+    tiled = 
+        mkPackage 
+            (../purescript-tiled/spago.dhall).dependencies
+            "../purescript-tiled"
+            "local"
+    ,pixijs = 
+        mkPackage
+            (../purescript-pixijs/spago.dhall).dependencies
+            "../purescript-pixijs"
+            "local"
+}
 
 in  upstream ⫽ overrides ⫽ additions
