@@ -2,16 +2,17 @@ module Main where
 
 import Prelude
 
-import Control.Monad.Error.Class (catchError)
-import Control.Monad.Except (ExceptT(..), runExceptT)
+import Control.Monad.Error.Class (catchError, throwError)
+import Control.Monad.Except (Except, ExceptT(..), runExcept, runExceptT)
 import DOM (loaded)
 import Data.Either (Either(..), note)
-import Data.Tiled.File.Map (solveTilesets)
+import Data.Tiled (texturesFromFiles, mapFromFiles)
 import Debug.Trace (spy)
-import Data.Tiled (textures)
+import Data.Array as Array
 import Effect (Effect)
 import Effect.Aff (Aff, launchAff_)
 import Effect.Class (liftEffect)
+import Effect.Class.Console (error)
 import Effect.Console (log)
 import Effect.Exception (Error, throw)
 import Game.AssetLoader (loadMapAssets, uriAssets)
@@ -32,6 +33,14 @@ runExceptEff m =
   >>= failLeft
   where failLeft (Left a) = throw a
         failLeft (Right a) = pure a
+
+throwExcept :: forall a. Except String a -> Effect a
+throwExcept a = 
+  case runExcept a of
+    Left e -> throw e
+    Right a -> pure a
+
+
 
 body' :: HTMLDocument -> Effect HTMLElement
 body' doc = runExceptEff
@@ -55,21 +64,25 @@ app = do
   level <- loadMapAssets "level1.json"
   stage <- liftEffect $ initStage
   blobs <- liftEffect $ uriAssets level
-  let tilesets = solveTilesets level.map level.tilesets
-  let textures' = textures level.map level.tilesets
+  textures' <- liftEffect
+               $ throwExcept
+               $ texturesFromFiles level.map level.tilesets level.images
+  tiles <- liftEffect
+            $ throwExcept
+            $ mapFromFiles level.map textures'
 
   let _ = spy "LEVEL" level
   let _ = spy "STAGE" stage
   let _ = spy "BLOBS" blobs
-  let _ = spy "TILESETS" tilesets
-  let _ = spy "TEXTURES" (show $ textures')
+  let _ = spy "TEXTURES" (textures')
+  let _ = spy "TILES" (Array.fromFoldable tiles.tiles)
 
   pure unit
 
 crashed :: Error -> Aff Unit
 crashed e = do
   -- | TODO, write to dom
-  liftEffect $ log $ show e
+  liftEffect $ log ("CRASH:" <> show e)
 
 main :: Effect Unit
 main = launchAff_ $ 
