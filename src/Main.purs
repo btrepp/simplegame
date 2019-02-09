@@ -5,10 +5,10 @@ import Prelude
 import Control.Monad.Error.Class (catchError, throwError)
 import Control.Monad.Except (Except, ExceptT(..), runExcept, runExceptT)
 import DOM (loaded)
+import Data.Array as Array
 import Data.Either (Either(..), note)
 import Data.Tiled (texturesFromFiles, mapFromFiles)
 import Debug.Trace (spy)
-import Data.Array as Array
 import Effect (Effect)
 import Effect.Aff (Aff, launchAff_)
 import Effect.Class (liftEffect)
@@ -16,7 +16,8 @@ import Effect.Class.Console (error)
 import Effect.Console (log)
 import Effect.Exception (Error, throw)
 import Game.AssetLoader (loadMapAssets, uriAssets)
-import Graphics.Pixi.FFI.Application (Application, _view, newApplication)
+import Graphics.Pixi.FFI.Application (Application, _stage, _view, newApplication)
+import Render (renderTiles)
 import Web.DOM.Node (appendChild)
 import Web.HTML (HTMLDocument, HTMLElement, window)
 import Web.HTML.HTMLDocument (body)
@@ -49,10 +50,10 @@ body' doc = runExceptEff
             <$> body doc)
 
 --- Builds the dom things we need
-initStage :: Effect Application
-initStage = do
+initStage :: forall r . {height:: Int, width :: Int | r} -> Effect Application
+initStage ({height,width}) = do
   dombody <- window >>= document >>= body'
-  pixi <-  newApplication {height:240,width:320}
+  pixi <-  newApplication {height,width}
   view <- _view pixi
   _ <- appendChild (toNode view) 
                    (toNode dombody)
@@ -62,20 +63,21 @@ app :: Aff Unit
 app = do
   loaded
   level <- loadMapAssets "level1.json"
-  stage <- liftEffect $ initStage
   blobs <- liftEffect $ uriAssets level
   textures' <- liftEffect
                $ throwExcept
                $ texturesFromFiles level.map level.tilesets level.images
-  tiles <- liftEffect
+  map' <- liftEffect
             $ throwExcept
             $ mapFromFiles level.map textures'
-
+  stage <- liftEffect $ initStage map'
+  scene <- liftEffect $ _stage stage
+  _ <- liftEffect $ renderTiles scene map'.tiles
   let _ = spy "LEVEL" level
   let _ = spy "STAGE" stage
   let _ = spy "BLOBS" blobs
   let _ = spy "TEXTURES" (textures')
-  let _ = spy "TILES" (Array.fromFoldable tiles.tiles)
+  let _ = spy "TILES" (Array.fromFoldable map'.tiles)
 
   pure unit
 
