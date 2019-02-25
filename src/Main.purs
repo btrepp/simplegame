@@ -2,20 +2,22 @@ module Main where
 
 import Prelude
 
-import Control.Monad.Error.Class (catchError)
-import Control.Monad.Except (ExceptT(..), runExceptT)
+import Control.Monad.Error.Class (catchError, throwError)
+import Control.Monad.Except (Except, ExceptT(..), runExcept, runExceptT)
 import DOM (loaded)
+import Data.Array as Array
 import Data.Either (Either(..), note)
-import Data.Tiled.File.Map (solveTilesets)
+import Data.Tiled (texturesFromFiles, mapFromFiles)
 import Debug.Trace (spy)
-import Data.Tiled (textures)
 import Effect (Effect)
 import Effect.Aff (Aff, launchAff_)
 import Effect.Class (liftEffect)
+import Effect.Class.Console (error)
 import Effect.Console (log)
 import Effect.Exception (Error, throw)
 import Game.AssetLoader (loadMapAssets, uriAssets)
-import Graphics.Pixi.FFI.Application (Application, _view, newApplication)
+import Graphics.Pixi.FFI.Application (Application, _stage, _view, newApplication)
+import Render (renderTiles)
 import Web.DOM.Node (appendChild)
 import Web.HTML (HTMLDocument, HTMLElement, window)
 import Web.HTML.HTMLDocument (body)
@@ -33,6 +35,14 @@ runExceptEff m =
   where failLeft (Left a) = throw a
         failLeft (Right a) = pure a
 
+throwExcept :: forall a. Except String a -> Effect a
+throwExcept a = 
+  case runExcept a of
+    Left e -> throw e
+    Right a -> pure a
+
+
+
 body' :: HTMLDocument -> Effect HTMLElement
 body' doc = runExceptEff
             $ ExceptT 
@@ -40,10 +50,10 @@ body' doc = runExceptEff
             <$> body doc)
 
 --- Builds the dom things we need
-initStage :: Effect Application
-initStage = do
+initStage :: forall r . {height:: Int, width :: Int | r} -> Effect Application
+initStage ({height,width}) = do
   dombody <- window >>= document >>= body'
-  pixi <-  newApplication {height:240,width:320}
+  pixi <-  newApplication {height,width}
   view <- _view pixi
   _ <- appendChild (toNode view) 
                    (toNode dombody)
@@ -53,23 +63,28 @@ app :: Aff Unit
 app = do
   loaded
   level <- loadMapAssets "level1.json"
-  stage <- liftEffect $ initStage
   blobs <- liftEffect $ uriAssets level
-  let tilesets = solveTilesets level.map level.tilesets
-  let textures' = textures level.map level.tilesets
-
+  textures' <- liftEffect
+               $ throwExcept
+               $ texturesFromFiles level.map level.tilesets level.images
+  map' <- liftEffect
+            $ throwExcept
+            $ mapFromFiles level.map textures'
+  stage <- liftEffect $ initStage map'
+  scene <- liftEffect $ _stage stage
+  _ <- liftEffect $ renderTiles scene map'.tiles
   let _ = spy "LEVEL" level
   let _ = spy "STAGE" stage
   let _ = spy "BLOBS" blobs
-  let _ = spy "TILESETS" tilesets
-  let _ = spy "TEXTURES" (show $ textures')
+  let _ = spy "TEXTURES" (textures')
+  let _ = spy "TILES" (Array.fromFoldable map'.tiles)
 
   pure unit
 
 crashed :: Error -> Aff Unit
 crashed e = do
   -- | TODO, write to dom
-  liftEffect $ log $ show e
+  liftEffect $ log ("CRASH:" <> show e)
 
 main :: Effect Unit
 main = launchAff_ $ 
